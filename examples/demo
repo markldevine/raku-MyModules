@@ -1,0 +1,58 @@
+#!/usr/bin/env raku
+
+use     Terminal::ANSIColor;
+need    MessageStream::Message;
+need    MessageStream;
+
+class TEST does MessageStream {
+
+    method INFO-receive (MessageStream::Message:D $message) {
+        my @tc-header;
+        if $message.options<header>:exists {
+            @tc-header = do .tc for $message.options<header>.split: /\s+/;
+        }
+        $*OUT.put: colored(@tc-header.join(' '), 'green bold underline') if @tc-header.elems;
+        my $indent  = 0;
+        $indent     = $message.options<indent> with $message.options<indent>;
+        $*OUT.put: ' ' x $indent ~ colored($message.payload, 'green') if $message.payload;
+    }
+    method NOTE-receive (MessageStream::Message:D $message) {
+        $*ERR.put: colored($message.payload, 'red') if $message.payload;
+    }
+    method DIAG-receive (MessageStream::Message:D $message) {
+        $*ERR.put: colored($message.payload, 'black on_white') if $message.payload;
+    }
+}
+
+my $demo    = TEST.new;
+
+#   INFO
+$demo.subscribe(:destination<INFO>);
+say colored('[[[ INFO subscribed now... ]]]', 'italic');
+$demo.post: :header('no payload - just a lowercase source header'), :unused-switch;
+$demo.post: 'post #1 - has a lowercase header & a payload, indent=2', :header('test header'), :2indent;
+$demo.post: 'post #2 - same header but payload indent=4 now', :header('test header'), :4indent;
+$demo.unsubscribe(:destination<INFO>);
+say colored('[[[ INFO unsubscribed now... ]]]', 'italic');
+$demo.post: 'post #3 - nothing subscribed -- no output';
+
+#   NOTE
+$demo.subscribe(:destination<NOTE>);
+say colored('[[[ NOTE subscribed now... ]]]', 'italic');
+$demo.post: 'post #4 - this post is noted';
+$demo.unsubscribe(:destination<NOTE>);
+say colored('[[[ NOTE unsubscribed now... ]]]', 'italic');
+$demo.post: 'post #5 - gone again';
+$demo.subscribe(:destination<NOTE>);
+say colored('[[[ NOTE re-subscribed again... ]]]', 'italic');
+$demo.post: 'post #6 - note is back after skipping a beat';
+
+#   DIAG
+$demo.subscribe(:destination<DIAG>);
+say colored('[[[ DIAG subscribed now... ]]]', 'italic');
+$demo.post: 'post #7 - both diag & note will show this single post()';
+
+$demo.subscribe(:destination<INFO>);
+say colored('[[[ INFO subscribed now... ]]]', 'italic');
+
+$demo.post: 'post #8 - diag, info, & note will all show this single post()';
